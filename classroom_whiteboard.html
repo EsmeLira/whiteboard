@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Classroom Whiteboard — Widgets</title>
+<style>
+  :root{
+    --toolbar-width:220px;
+    --accent:#2b7cff;
+    --bg:#f7f9fc;
+    --widget-bg:#fff;
+    --widget-border:#ddd;
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);overflow:hidden}
+  .app {
+    display:flex;
+    height:100vh;
+    gap:12px;
+    padding:12px;
+    box-sizing:border-box;
+  }
+
+  /* toolbar */
+  .toolbar{
+    width:var(--toolbar-width);
+    background:linear-gradient(180deg,#ffffff, #f4f8ff);
+    border-radius:8px;
+    padding:12px;
+    box-shadow:0 6px 18px rgba(20,30,60,0.06);
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .toolbar h2{margin:0;font-size:16px;color:#0b2447}
+  .btn{
+    display:block;padding:10px;border-radius:6px;background:var(--accent);color:white;text-align:center;
+    cursor:pointer;border:none;font-weight:600;
+  }
+  .btn.secondary{background:transparent;color:var(--accent);border:1px solid rgba(43,124,255,0.14)}
+  .small{padding:8px;font-size:13px}
+  .toolbar .group{display:flex;flex-direction:column;gap:8px}
+  .toolbar label{font-size:13px;color:#223}
+
+  /* board */
+  .board{
+    flex:1;
+    position:relative;
+    border-radius:8px;
+    overflow:hidden;
+    background-image:
+      linear-gradient(90deg, rgba(255,255,255,0.9), rgba(255,255,255,0.6));
+    box-shadow: inset 0 0 0 1px rgba(16,24,40,0.03);
+  }
+  .board-inner{
+    position:absolute;left:0;right:0;top:0;bottom:0;padding:14px;box-sizing:border-box;
+  }
+
+  /* widget */
+  .widget{
+    position:absolute;
+    background:var(--widget-bg);
+    border:1px solid var(--widget-border);
+    border-radius:8px;
+    min-width:120px;
+    min-height:80px;
+    box-shadow:0 6px 18px rgba(20,30,60,0.06);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    user-select:none;
+  }
+  .widget-header{
+    background:linear-gradient(90deg,#ffffff,#f3f7ff);
+    padding:8px 10px;
+    cursor:grab;
+    display:flex;
+    gap:8px;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:1px solid rgba(0,0,0,0.04);
+  }
+  .widget-title{font-weight:600;font-size:13px;color:#113}
+  .widget-controls{display:flex;gap:6px}
+  .widget-controls button{border:none;background:transparent;cursor:pointer;font-weight:700;padding:4px;border-radius:4px}
+  .widget-body{padding:8px;flex:1;overflow:auto}
+  .resize-handle{
+    width:14px;height:14px;position:absolute;right:6px;bottom:6px;cursor:se-resize;border-radius:3px;
+    background:linear-gradient(180deg, #f3f7ff, #e6f0ff);
+    border:1px solid rgba(0,0,0,0.05);
+  }
+
+  /* text widget content */
+  .text-body{min-height:40px;outline:none}
+
+  /* timer */
+  .timer-display{font-size:28px;font-weight:700;text-align:center}
+  .timer-controls{display:flex;gap:6px;justify-content:center;margin-top:8px}
+
+  /* timetable */
+  .timetable-list{display:flex;flex-direction:column;gap:6px}
+  .tt-row{display:flex;gap:6px;align-items:center}
+  input[type="time"], input[type="number"], input[type="text"]{padding:6px;border-radius:6px;border:1px solid #ddd}
+  .mute-toggle{font-size:12px;padding:6px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer}
+
+  /* small helpers */
+  .flex{display:flex}
+  .spacer{flex:1}
+  footer.small{font-size:12px;color:#516}
+  .controls-row{display:flex;gap:8px;align-items:center}
+  .import-export{display:flex;gap:6px}
+
+  /* responsive */
+  @media (max-width:800px){
+    .toolbar{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="toolbar" aria-label="toolbar">
+    <h2>Whiteboard Controls</h2>
+
+    <div class="group">
+      <button class="btn" id="addText">+ Add Text</button>
+      <button class="btn" id="addTimer">+ Add Timer</button>
+      <button class="btn" id="addTimetable">+ Add Timetable</button>
+      <button class="btn" id="addImage">+ Add Image</button>
+      <button class="btn" id="addVideo">+ Add YouTube</button>
+    </div>
+
+    <div class="group">
+      <label>Board actions</label>
+      <div class="import-export">
+        <button class="btn secondary small" id="exportBtn">Export</button>
+        <button class="btn secondary small" id="importBtn">Import</button>
+      </div>
+      <button class="btn secondary small" id="clearBtn">Clear Board</button>
+    </div>
+
+    <div class="group">
+      <label>Save / Load</label>
+      <div class="controls-row">
+        <button class="btn small" id="saveBtn">Save Now</button>
+        <button class="btn small secondary" id="loadBtn">Load</button>
+      </div>
+      <footer class="small">Auto-saves to localStorage. Timers only run while page open.</footer>
+    </div>
+  </aside>
+
+  <main class="board" id="board" role="application" aria-label="whiteboard">
+    <div class="board-inner" id="boardInner"></div>
+  </main>
+</div>
+
+<!-- hidden inputs -->
+<input type="file" id="imageFileInput" accept="image/*" style="display:none"/>
+<input type="file" id="importFile" accept="application/json" style="display:none"/>
+
+<script>
+/*
+  Classroom Whiteboard single-file app
+  - Draggable & resizable widgets
+  - Text widget (contenteditable)
+  - Timer widget (countdown/count-up)
+  - Timetable widget (rows with alarm times)
+  - Image widget (upload or URL)
+  - YouTube embed widget (paste URL)
+  - Save/load via localStorage; export/import JSON
+*/
+
+const boardInner = document.getElementById('boardInner');
+let zCounter = 1;
+const SAVE_KEY = 'classroom_whiteboard_v1';
+let autoSaveTimer = null;
+
+function uid(prefix='w'){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+
+// ---------- widget factory ----------
+function makeWidget({type, x=40, y=40, w=300, h=180, data={}, id=null}) {
+  const wid = id || uid();
+  const el = document.createElement('div');
+  el.className = 'widget';
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.width = w + 'px';
+  el.style.height = h + 'px';
+  el.dataset.type = type;
+  el.dataset.id = wid;
+  el.style.zIndex = ++zCounter;
+
+  // header
+  const header = document.createElement('div'); header.className = 'widget-header';
+  const title = document.createElement('div'); title.className='widget-title';
+  title.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+  const controls = document.createElement('div'); controls.className='widget-controls';
+  const btnMin = document.createElement('button'); btnMin.title='Minimize'; btnMin.innerHTML='—';
+  const btnClose = document.createElement('button'); btnClose.title='Close'; btnClose.innerHTML='✕';
+  controls.appendChild(btnMin); controls.appendChild(btnClose);
+  header.appendChild(title); header.appendChild(controls);
+  el.appendChild(header);
+
+  // body
+  const body = document.createElement('div'); body.className='widget-body';
+  if(type==='text') {
+    const tx = document.createElement('div');
+    tx.className='text-body';
+    tx.contentEditable = true;
+    tx.innerHTML = data.text || 'Double-click to edit text...';
+    body.appendChild(tx);
+  } else if(type==='timer') {
+    const display = document.createElement('div'); display.className='timer-display';
+    display.textContent = data.display || '00:00:00';
+    const controlsRow = document.createElement('div'); controlsRow.className='timer-controls';
+    const startBtn=document.createElement('button'); startBtn.className='btn small'; startBtn.textContent='Start';
+    const pauseBtn=document.createElement('button'); pauseBtn.className='btn small secondary'; pauseBtn.textContent='Pause';
+    const resetBtn=document.createElement('button'); resetBtn.className='btn small secondary'; resetBtn.textContent='Reset';
+    controlsRow.appendChild(startBtn); controlsRow.appendChild(pauseBtn); controlsRow.appendChild(resetBtn);
+
+    // options: set duration
+    const opts = document.createElement('div'); opts.style.marginTop='8px';
+    opts.innerHTML = `<label style="font-size:12px">Set (seconds): <input type="number" class="timer-seconds" value="${data.seconds||0}" style="width:80px"/></label> <label style="font-size:12px;margin-left:8px"><input type="checkbox" class="timer-loop"/> Loop</label>`;
+    body.appendChild(display); body.appendChild(controlsRow); body.appendChild(opts);
+
+    // state:
+    el._timer = {
+      totalSeconds: Number(data.seconds || 0),
+      remaining: Number(data.remaining ?? data.seconds ?? 0),
+      running:false,
+      startTs:null,
+      loop: data.loop||false
+    };
+
+    // functions
+    function formatTime(s){
+      s = Math.max(0,Math.floor(s));
+      const hh = String(Math.floor(s/3600)).padStart(2,'0');
+      const mm = String(Math.floor((s%3600)/60)).padStart(2,'0');
+      const ss = String(s%60).padStart(2,'0');
+      return `${hh}:${mm}:${ss}`;
+    }
+    function tickTimer(){
+      if(!el._timer.running) return;
+      const elapsed = Math.floor((Date.now() - el._timer.startTs)/1000);
+      const rem = el._timer.remaining - elapsed;
+      display.textContent = formatTime(rem);
+      if(rem <= 0){
+        el._timer.running = false;
+        display.textContent = formatTime(0);
+        beep();
+        if(document.querySelector('.timer-seconds')) {
+          // if loop checked
+          if(el._timer.loop){
+            el._timer.remaining = el._timer.totalSeconds;
+            el._timer.startTs = Date.now();
+            el._timer.running = true;
+            requestAnimationFrame(tickTimer);
+          }
+        }
+        saveBoard();
+        return;
+      }
+      requestAnimationFrame(tickTimer);
+    }
+
+    // control events
+    startBtn.addEventListener('click', () => {
+      const secondsInput = el.querySelector('.timer-seconds');
+      el._timer.totalSeconds = Number(secondsInput.value || 0);
+      el._timer.remaining = Number(el._timer.remaining || el._timer.totalSeconds);
+      el._timer.loop = Boolean(el.querySelector('.timer-loop').checked);
+      el._timer.startTs = Date.now();
+      el._timer.running = true;
+      tickTimer();
+      saveBoard();
+    });
+    pauseBtn.addEventListener('click', () => {
+      if(!el._timer.running) return;
+      const elapsed = Math.floor((Date.now() - el._timer.startTs)/1000);
+      el._timer.remaining = Math.max(0, el._timer.remaining - elapsed);
+      el._timer.running = false;
+      display.textContent = formatTime(el._timer.remaining);
+      saveBoard();
+    });
+    resetBtn.addEventListener('click', () => {
+      el._timer.totalSeconds = Number(el.querySelector('.timer-seconds').value || 0);
+      el._timer.remaining = el._timer.totalSeconds;
+      el._timer.running = false;
+      display.textContent = formatTime(el._timer.remaining);
+      saveBoard();
+    });
+
+    // initialize display
+    display.textContent = (data.display) ? data.display : formatTime(el._timer.remaining);
+    // restore loop setting
+    if(data.loop) el.querySelector('.timer-loop').checked = true;
+  } else if(type==='timetable') {
+    const list = document.createElement('div'); list.className='timetable-list';
+    const addRowBtn = document.createElement('button'); addRowBtn.className='btn small'; addRowBtn.textContent='Add Row';
+    body.appendChild(list); body.appendChild(addRowBtn);
+
+    // data.rows = [{label, timeStr, enabled}]
+    const rows = data.rows || [];
+    function renderRows(){
+      list.innerHTML='';
+      rows.forEach((r, idx) => {
+        const row = document.createElement('div'); row.className='tt-row';
+        const label = document.createElement('input'); label.type='text'; label.value=r.label||`Item ${idx+1}`; label.style.flex='1';
+        const time = document.createElement('input'); time.type='time'; time.value = r.time||'08:00';
+        const enable = document.createElement('button'); enable.className='mute-toggle'; enable.textContent = r.enabled ? 'Alarm On' : 'Alarm Off';
+        const del = document.createElement('button'); del.className='btn small secondary'; del.textContent='Delete';
+        row.appendChild(label); row.appendChild(time); row.appendChild(enable); row.appendChild(del);
+        list.appendChild(row);
+
+        // listeners
+        label.addEventListener('input', ()=>{ r.label = label.value; saveBoard();});
+        time.addEventListener('input', ()=>{ r.time = time.value; saveBoard();});
+        enable.addEventListener('click', ()=>{ r.enabled = !r.enabled; enable.textContent = r.enabled ? 'Alarm On' : 'Alarm Off'; saveBoard();});
+        del.addEventListener('click', ()=>{ rows.splice(idx,1); renderRows(); saveBoard();});
+      });
+    }
+    addRowBtn.addEventListener('click', ()=>{ rows.push({label:'New', time:'08:00', enabled:true}); renderRows(); saveBoard();});
+    renderRows();
+
+    // periodic alarm check
+    el._timetable = {rows};
+    setInterval(()=> {
+      const now = new Date();
+      const hhmm = now.toTimeString().slice(0,5);
+      rows.forEach(r=>{
+        if(r.enabled && r.time === hhmm && !r._firedToday) {
+          beep();
+          r._firedToday = true;
+          saveBoard();
+        }
+      });
+      // reset _firedToday if date changes
+      if(!el._timetable._lastDate || el._timetable._lastDate !== new Date().toDateString()){
+        rows.forEach(r=> r._firedToday = false);
+        el._timetable._lastDate = new Date().toDateString();
+      }
+    }, 1000*15); // check every 15s
+  } else if(type==='image') {
+    const imgCont = document.createElement('div'); imgCont.style.display='flex'; imgCont.style.flexDirection='column'; imgCont.style.gap='8px';
+    const placeholder = document.createElement('img'); placeholder.style.maxWidth='100%'; placeholder.style.maxHeight='200px'; placeholder.alt='image widget';
+    const controls = document.createElement('div'); controls.className='controls-row';
+    const uploadBtn = document.createElement('button'); uploadBtn.className='btn small'; uploadBtn.textContent='Upload';
+    const urlBtn = document.createElement('button'); urlBtn.className='btn small secondary'; urlBtn.textContent='URL';
+    controls.appendChild(uploadBtn); controls.appendChild(urlBtn);
+    imgCont.appendChild(placeholder); imgCont.appendChild(controls);
+    body.appendChild(imgCont);
+
+    if(data.src) placeholder.src = data.src;
+
+    uploadBtn.addEventListener('click', ()=>{
+      document.getElementById('imageFileInput').onchange = (ev)=>{
+        const file = ev.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = ()=>{ placeholder.src = reader.result; saveBoard(); }
+        reader.readAsDataURL(file);
+      };
+      document.getElementById('imageFileInput').click();
+    });
+    urlBtn.addEventListener('click', ()=>{
+      const url = prompt('Enter image URL:');
+      if(url) { placeholder.src = url; saveBoard(); }
+    });
+  } else if(type==='video') {
+    const label = document.createElement('div'); label.style.fontSize='13px'; label.style.marginBottom='6px';
+    label.textContent = 'YouTube embed. Paste a YouTube link:';
+    const row = document.createElement('div'); row.className='controls-row';
+    const input = document.createElement('input'); input.type='text'; input.placeholder='https://youtube.com/watch?v=...'; input.style.flex='1';
+    const setBtn = document.createElement('button'); setBtn.className='btn small'; setBtn.textContent='Embed';
+    row.appendChild(input); row.appendChild(setBtn);
+    const frameWrap = document.createElement('div'); frameWrap.style.marginTop='8px';
+    body.appendChild(label); body.appendChild(row); body.appendChild(frameWrap);
+
+    if(data.url) {
+      input.value = data.url;
+      frameWrap.innerHTML = youtubeIframe(data.url);
+    }
+    setBtn.addEventListener('click', ()=> {
+      const v = input.value.trim();
+      if(v) frameWrap.innerHTML = youtubeIframe(v);
+      saveBoard();
+    });
+  }
+
+  // resize handle
+  const res = document.createElement('div'); res.className='resize-handle';
+  el.appendChild(body); el.appendChild(res);
+  boardInner.appendChild(el);
+
+  // header events: dragging
+  header.addEventListener('pointerdown', (e)=>{
+    if(e.target.tagName === 'BUTTON') return; // ignore clicking header buttons
+    el.setPointerCapture(e.pointerId);
+    const startX = e.clientX, startY = e.clientY;
+    const startLeft = parseFloat(el.style.left), startTop = parseFloat(el.style.top);
+    el.style.zIndex = ++zCounter;
+    function move(ev) {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      el.style.left = (startLeft + dx) + 'px';
+      el.style.top = (startTop + dy) + 'px';
+    }
+    function up(ev) {
+      el.releasePointerCapture(e.pointerId);
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      saveBoard();
+    }
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+
+  // resize
+  res.addEventListener('pointerdown', (e)=>{
+    el.setPointerCapture(e.pointerId);
+    const startX = e.clientX, startY = e.clientY;
+    const startW = el.offsetWidth, startH = el.offsetHeight;
+    function move(ev){
+      const nx = Math.max(120, startW + (ev.clientX - startX));
+      const ny = Math.max(80, startH + (ev.clientY - startY));
+      el.style.width = nx + 'px';
+      el.style.height = ny + 'px';
+    }
+    function up(ev){
+      el.releasePointerCapture(e.pointerId);
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      saveBoard();
+    }
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+
+  // header control buttons
+  btnClose.addEventListener('click', ()=> { el.remove(); saveBoard(); });
+  btnMin.addEventListener('click', ()=> {
+    const body = el.querySelector('.widget-body');
+    if(body.style.display === 'none'){ body.style.display='block'; res.style.display='block'; }
+    else { body.style.display='none'; res.style.display='none'; }
+    saveBoard();
+  });
+
+  // focus z-index on click
+  el.addEventListener('pointerdown', ()=> { el.style.zIndex = ++zCounter; });
+
+  // store initial data in element for save
+  el._data = data || {};
+  return el;
+}
+
+function youtubeIframe(url){
+  // try to extract v= or youtu.be/ id
+  let id = null;
+  try {
+    const u = new URL(url);
+    if(u.hostname.includes('youtu.be')) id = u.pathname.slice(1);
+    if(u.searchParams && u.searchParams.get('v')) id = u.searchParams.get('v');
+  } catch(e){}
+  if(!id) id = url; // fallback allow embed code
+  return `<iframe width="100%" height="200" src="https://www.youtube.com/embed/${id}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+}
+
+// ---------- board management ----------
+function addWidget(type, opts={}) {
+  const w = makeWidget(Object.assign({type,x:40+Math.random()*60, y:40+Math.random()*60}, opts));
+  saveBoard();
+  return w;
+}
+
+document.getElementById('addText').addEventListener('click', ()=> addWidget('text'));
+document.getElementById('addTimer').addEventListener('click', ()=> addWidget('timer', {data:{seconds:300}}));
+document.getElementById('addTimetable').addEventListener('click', ()=> addWidget('timetable', {data:{rows:[{label:'Bell',time:'09:00',enabled:true}]}}));
+document.getElementById('addImage').addEventListener('click', ()=> addWidget('image'));
+document.getElementById('addVideo').addEventListener('click', ()=> addWidget('video'));
+
+// save board -> collect widget states
+function serializeBoard(){
+  const widgets = Array.from(boardInner.querySelectorAll('.widget')).map(el => {
+    const type = el.dataset.type;
+    const id = el.dataset.id;
+    const rect = {x: parseFloat(el.style.left), y: parseFloat(el.style.top), w: el.offsetWidth, h: el.offsetHeight};
+    const data = {};
+
+    if(type==='text'){
+      const tx = el.querySelector('.text-body');
+      data.text = tx ? tx.innerHTML : '';
+    } else if(type==='timer'){
+      // capture timer state
+      const secsInput = el.querySelector('.timer-seconds');
+      data.seconds = Number(secsInput ? secsInput.value : 0);
+      if(el._timer){
+        // compute remaining if running
+        if(el._timer.running){
+          const elapsed = Math.floor((Date.now() - el._timer.startTs)/1000);
+          data.remaining = Math.max(0, el._timer.remaining - elapsed);
+        } else {
+          data.remaining = el._timer.remaining;
+        }
+        data.loop = !!el._timer.loop;
+      }
+    } else if(type==='timetable'){
+      if(el._timetable && el._timetable.rows){
+        data.rows = el._timetable.rows.map(r => ({label:r.label, time:r.time, enabled:!!r.enabled}));
+      } else {
+        data.rows = [];
+      }
+    } else if(type==='image'){
+      const img = el.querySelector('img');
+      data.src = img ? img.src : null;
+    } else if(type==='video'){
+      const input = el.querySelector('input[type="text"]');
+      data.url = input ? input.value : null;
+    }
+
+    return {id, type, rect, data};
+  });
+  return {widgets, savedAt: new Date().toISOString()};
+}
+function saveBoard(){
+  const payload = serializeBoard();
+  localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+}
+function loadBoard(){
+  const raw = localStorage.getItem(SAVE_KEY);
+  if(!raw) return;
+  try {
+    const board = JSON.parse(raw);
+    boardInner.innerHTML = '';
+    board.widgets.forEach(w => {
+      makeWidget({type:w.type, x:w.rect.x, y:w.rect.y, w:w.rect.w, h:w.rect.h, data:w.data, id:w.id});
+    });
+  } catch(e){ console.error('load error', e); }
+}
+
+// export/import
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const data = serializeBoard();
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'whiteboard.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  const fi = document.getElementById('importFile');
+  fi.onchange = (ev)=>{
+    const file = ev.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=> {
+      try {
+        const json = JSON.parse(reader.result);
+        // quick import: replace board
+        boardInner.innerHTML = '';
+        json.widgets.forEach(w => {
+          makeWidget({type:w.type, x:w.rect.x, y:w.rect.y, w:w.rect.w, h:w.rect.h, data:w.data, id:w.id});
+        });
+        saveBoard();
+      } catch(e){ alert('Invalid JSON'); }
+    }
+    reader.readAsText(file);
+  };
+  fi.click();
+});
+
+// clear
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(confirm('Clear the board? This cannot be undone.')){ boardInner.innerHTML=''; saveBoard(); }
+});
+
+// manual save/load
+document.getElementById('saveBtn').addEventListener('click', ()=> { saveBoard(); alert('Saved.'); });
+document.getElementById('loadBtn').addEventListener('click', ()=> { loadBoard(); alert('Loaded from localStorage (if present).'); });
+
+// initial load
+loadBoard();
+
+// autosave every 10s (debounced)
+setInterval(saveBoard, 10000);
+
+// ---------- utility beep ----------
+function beep(){
+  try {
+    // use WebAudio to make short tone
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = 880;
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    // quick ramp
+    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    setTimeout(()=> {
+      g.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.2);
+      o.stop(ctx.currentTime + 0.25);
+      ctx.close();
+    }, 300);
+  } catch(e){
+    console.warn('beep failed', e);
+  }
+}
+
+// prevent accidental dragstart selection
+document.addEventListener('dragstart', e => e.preventDefault());
+
+</script>
+</body>
+</html>
